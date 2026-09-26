@@ -59,7 +59,7 @@ def inspect_dataframe(name: str, df: pd.DataFrame, is_source: bool = True) -> No
 
 def discover_files(data_dir: Path) -> Dict[str, Optional[Path]]:
     """Automatically detect source files and ground truth in data directory."""
-    all_tsvs = sorted(list(data_dir.glob("*.tsv")) + list(data_dir.glob("*.csv")))
+    all_tsvs = sorted(list(data_dir.rglob("*.tsv")) + list(data_dir.rglob("*.csv")))
     # Exclude gitkeep or hidden files
     all_tsvs = [f for f in all_tsvs if not f.name.startswith(".")]
 

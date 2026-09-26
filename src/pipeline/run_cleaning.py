@@ -144,7 +144,7 @@ def run_cleaning(
         files_to_process = [input_dir / f for f in source_files]
     else:
         # Auto-discover source TSVs excluding ground truth and hidden files
-        all_tsvs = sorted(input_dir.glob("*.tsv"))
+        all_tsvs = sorted(input_dir.rglob("*.tsv"))
         files_to_process = [
             f
             for f in all_tsvs
