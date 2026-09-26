@@ -1,25 +1,30 @@
 # Business Entity Resolution Pipeline
 
-A modular machine learning pipeline for business entity resolution across disparate data sources.
+A modular machine learning pipeline for business entity resolution across disparate data sources for the Amazon ML Challenge 2026.
 
-## Project Structure
+## Repo Structure
 
 ```text
-├── data/                  # Raw TSV dataset files (source_1.tsv, source_2.tsv, source_3.tsv, ground_truth.tsv)
-├── notebooks/             # Exploratory notebooks and prototyping (not part of production pipeline)
-├── outputs/               # Submission files, evaluation reports, and match artifacts
+├── data/
+│   ├── train/                 # Training raw datasets
+│   └── test/                  # Test raw datasets
+├── notebooks/                 # Exploratory notebooks and prototyping
+├── outputs/                   # Processed parquets, submission files, evaluation reports
 ├── src/
-│   ├── inspect_data.py    # Scratch inspection script for raw datasets & ground truth
-│   ├── pipeline/          # Pipeline stage modules (stubs ready for implementation)
-│   │   ├── cleaning.py    # Text normalisation, missing value imputation, entity standardization
-│   │   ├── blocking.py    # Candidate pair generation (n-gram, token index, country blocking)
-│   │   ├── features.py    # Feature extraction (Levenshtein, Jaro-Winkler, cosine embeddings)
-│   │   ├── matching.py    # Classifier model & decision logic (LightGBM, thresholds)
-│   │   └── aggregation.py # Connected components, transitive closure & submission formatting
-│   └── utils/             # Shared helpers
-│       ├── config.py      # Base paths, schemas, and pipeline configurations
-│       └── io.py          # Data ingestion with strict string dtype & column validation
+│   ├── inspect_data.py        # Inspection script for raw datasets
+│   ├── pipeline/
+│   │   ├── cleaning.py        # Text normalisation, missing value imputation
+│   │   ├── run_cleaning.py    # Runner for the cleaning stage
+│   │   ├── blocking.py        # Candidate pair generation (inverted-index & RapidFuzz scoring)
+│   │   ├── features.py        # (PENDING) Feature extraction 
+│   │   ├── matching.py        # (PENDING) Classifier model & decision logic
+│   │   └── aggregation.py     # (PENDING) Connected components & submission formatting
+│   └── utils/
+│       ├── config.py          # Base paths and configurations
+│       └── io.py              # Data ingestion wrappers
+├── tests/                     # Unit tests
 ├── .gitignore
+├── methodology.md             # Living document of architectural decisions and gaps
 ├── README.md
 └── requirements.txt
 ```
@@ -29,6 +34,7 @@ A modular machine learning pipeline for business entity resolution across dispar
 1. **Create and activate a virtual environment**:
    ```bash
    python -m venv .venv
+   
    # Windows:
    .venv\Scripts\activate
    # Linux/macOS:
@@ -40,34 +46,42 @@ A modular machine learning pipeline for business entity resolution across dispar
    pip install -r requirements.txt
    ```
 
-## Dataset Specifications
+> **Note on Encoding (Windows Users):**
+> When reading the raw TSV files, you **must** explicitly pass `encoding="utf-8"` (e.g. to `pd.read_csv`). Windows defaults to `charmap`/`cp1252` encoding, which will crash or severely corrupt Devanagari characters and other Unicode text present in the dataset. This has already been patched in our data loaders (`src/utils/io.py`), but keep this in mind if writing custom scripts.
 
-Place raw TSV files into `/data`.
+## Data Layout Expected
 
-Each source TSV is loaded with `sep="\t"` and `dtype=str` for all columns to prevent automatic type coercion on IDs.
+The pipeline expects raw TSV files to be strictly located in the following directories, with exact filenames:
 
-### Expected Schema
-Source files are expected to contain the following columns:
-- `entity_id`: Unique identifier for the record
-- `business_name`: Name of the business entity
-- `business_address`: Full or partial address string
-- `country`: Country identifier/code
+*   **Training Data**: 
+    *   `data/train/train_ground_truth.tsv`
+    *   `data/train/train_source1.tsv`
+    *   `data/train/train_source2.tsv`
+    *   `data/train/train_source3.tsv`
+*   **Test Data**:
+    *   `data/test/test_source1.tsv`
+    *   `data/test/test_source2.tsv`
+    *   `data/test/test_source3.tsv`
 
-## Quick Start / Data Inspection
+## How to Run the Pipeline
 
-To inspect raw files in the `data/` directory:
+### 1. Data Cleaning
+The data cleaning module normalizes text, standardizes missing values, and exports compressed `.parquet` files for downstream memory efficiency.
 
 ```bash
-python src/inspect_data.py
+python src/pipeline/run_cleaning.py
 ```
+*(Optionally pass `--input-dir` and `--output-dir` to point to different dataset samples).*
 
-Options:
-- `--data-dir PATH`: Directory containing TSVs (default: `data/`)
-- `--source-files PATH [PATH ...]`: Specify exact source files to inspect
-- `--ground-truth PATH`: Specify exact ground truth file path
+### 2. Blocking (Candidate Generation)
+The blocking module builds a memory-efficient disk-sharded inverted index to generate candidate pairs between `Source 1` and the noisy sources (`Source 2`/`Source 3`). 
 
-The inspection script outputs:
-- Total row and column counts
-- Column data types
-- Missing/empty value counts for `business_name` and `business_address`
-- First 5 rows preview
+```bash
+python src/pipeline/blocking.py --chunksize 200000 --max-pairs 100000 --shards 32
+```
+*   `--chunksize`: Controls the PyArrow Parquet streaming batch size. Keep at `200000` to prevent memory blowouts.
+*   `--max-pairs`: The ceiling threshold for combinatorial explosion. Oversized blocks exceeding this will be strictly truncated using a `RapidFuzz` Top-K token similarity score to preserve recall.
+*   `--shards`: The number of intermediate disk shards to map blocking keys into.
+
+### 3. Feature Engineering & Matching
+*PENDING - Pipeline execution details will be updated once Phase 4 and 5 are implemented.*
