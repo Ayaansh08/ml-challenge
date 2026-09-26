@@ -41,7 +41,7 @@ def load_source(
         raise FileNotFoundError(f"Source file not found at: {file_path.resolve()}")
 
     # Read TSV with dtype=str for all columns to prevent pandas type inference on IDs
-    df = pd.read_csv(file_path, sep="\t", dtype=str)
+    df = pd.read_csv(file_path, sep="\t", dtype=str, encoding="utf-8")
 
     if validate_columns:
         required = expected_columns if expected_columns is not None else EXPECTED_COLUMNS
@@ -73,4 +73,4 @@ def load_ground_truth(path: Union[str, Path]) -> pd.DataFrame:
         raise FileNotFoundError(f"Ground truth file not found at: {file_path.resolve()}")
 
     sep = "\t" if file_path.suffix.lower() == ".tsv" else ","
-    return pd.read_csv(file_path, sep=sep, dtype=str)
+    return pd.read_csv(file_path, sep=sep, dtype=str, encoding="utf-8")

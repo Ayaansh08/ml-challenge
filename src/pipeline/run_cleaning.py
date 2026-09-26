@@ -64,6 +64,7 @@ def process_file_in_chunks(
             dtype=str,
             chunksize=chunksize,
             low_memory=False,
+            encoding="utf-8",
         )
 
         for chunk_idx, raw_chunk in enumerate(chunk_iter, start=1):
