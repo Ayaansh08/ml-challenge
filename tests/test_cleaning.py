@@ -187,7 +187,7 @@ class TestDataCleaning(unittest.TestCase):
         self.assertFalse(cleaned_df.loc[0, "is_bare_domain"])
         self.assertEqual(cleaned_df.loc[1, "cleaned_name"], "example.com")
         self.assertTrue(cleaned_df.loc[1, "is_bare_domain"])
-        self.assertIsNone(cleaned_df.loc[1, "cleaned_address"])
+        self.assertTrue(pd.isna(cleaned_df.loc[1, "cleaned_address"]))
 
 
 if __name__ == "__main__":
