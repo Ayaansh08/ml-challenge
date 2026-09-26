@@ -70,3 +70,11 @@ models/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Munder Difflin / Agent Harness Artifacts
+.freebuff/
+hive/
+palace/
+roster-backups/
+roster.json
+hallways.json
