@@ -101,3 +101,40 @@ python src/pipeline/train_biencoder.py \
   --fine-tuned-model outputs/models/biencoder_all_minilm_l6_v2 \
   --compare-only
 ```
+
+---
+
+## Phase 4 - Feature Engineering
+*Date: 2026-09-27*
+- **Module (`src/pipeline/features.py`)**:
+  - Engineered 30+ pairwise similarity features including `Levenshtein`, `Jaro-Winkler`, `token_sort_ratio`, `token_set_ratio`, exact/prefix matches.
+  - Subcomponent features for address (postal code, street, landmark) and country matches.
+  - Implemented batch processing with `O(1)` dict lookups for fast retrieval.
+- **Testing**: 19 unit tests passing (`tests/test_features.py`).
+
+---
+
+## Phase 5 - Matching / Classification
+*Date: 2026-09-27*
+- **Module (`src/pipeline/matching.py`)**:
+  - Implemented `LightGBM` binary classifier predicting match probability.
+  - Handles imbalanced classification natively using `scale_pos_weight`.
+  - Configurable thresholding for prediction.
+- **Testing**: 6 unit tests passing (`tests/test_matching.py`).
+
+---
+
+## Phase 6 - Aggregation & Submission
+*Date: 2026-09-27*
+- **Module (`src/pipeline/aggregation.py`)**:
+  - Transitive closure clustering using `networkx.connected_components`.
+  - Generates final cluster groupings and maps them to singletons if unmatched.
+  - Formats output strictly to the competition requirements (`submission.tsv`).
+- **Testing**: 11 unit tests passing (`tests/test_aggregation.py`).
+
+---
+
+## Phase 7 - End-to-End Integration (In Progress)
+*Date: 2026-09-27*
+- **Objective**: String all 6 phases together via `src/pipeline/run_pipeline.py`.
+- **Status**: Dispatched to `Andy`. Testing on a subset (e.g. 50k rows) to ensure full data flow from raw TSVs to final submission.

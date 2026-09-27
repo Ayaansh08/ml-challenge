@@ -18,9 +18,9 @@ A modular machine learning pipeline for business entity resolution across dispar
 │   │   ├── cleaning.py        # Text normalisation, missing value imputation
 │   │   ├── run_cleaning.py    # Runner for the cleaning stage
 │   │   ├── blocking.py        # Candidate pair generation (inverted-index & RapidFuzz scoring)
-│   │   ├── features.py        # (PENDING) Feature extraction 
-│   │   ├── matching.py        # (PENDING) Classifier model & decision logic
-│   │   └── aggregation.py     # (PENDING) Connected components & submission formatting
+│   │   ├── features.py        # Feature extraction (Levenshtein, Jaro-Winkler, etc.)
+│   │   ├── matching.py        # LightGBM Classifier model & decision logic
+│   │   └── aggregation.py     # Connected components & submission formatting
 │   └── utils/
 │       ├── config.py          # Base paths and configurations
 │       └── io.py              # Data ingestion wrappers
@@ -86,4 +86,23 @@ python src/pipeline/blocking.py --chunksize 200000 --max-pairs 100000 --shards 3
 *   `--shards`: The number of intermediate disk shards to map blocking keys into.
 
 ### 3. Feature Engineering & Matching
-*PENDING - Pipeline execution details will be updated once Phase 4 and 5 are implemented.*
+Features are engineered in a pairwise manner using similarity scores (fuzzy string matching, exact tokens, etc.). The LightGBM matching model then generates a prediction score for each candidate pair.
+
+```bash
+# Features are usually executed programmatically but can be run via:
+python src/pipeline/features.py 
+# Then run matching to train/predict:
+python src/pipeline/matching.py 
+```
+
+### 4. Aggregation
+Connected components and transitive closure logic assigns all matches to clustered IDs and singletons.
+```bash
+python src/pipeline/aggregation.py
+```
+
+### 5. End-to-End Pipeline
+An automated integration runner `run_pipeline.py` (currently in development, Phase 7) orchestrates the entire pipeline:
+```bash
+python src/pipeline/run_pipeline.py --input-dir data/test --output submission.tsv
+```
