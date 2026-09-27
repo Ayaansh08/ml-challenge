@@ -63,11 +63,16 @@ FRENCH_ADDRESS_TOKENS: List[Tuple[str, str]] = [
 
 def format_entity_text(cleaned_name: Optional[str], cleaned_address: Optional[str]) -> str:
     """Format cleaned entity fields into model input string: '{cleaned_name} [SEP] {cleaned_address}'."""
-    name_part = cleaned_name.strip() if cleaned_name else ""
-    addr_part = cleaned_address.strip() if cleaned_address else ""
+    name_part = str(cleaned_name).strip() if pd.notna(cleaned_name) else ""
+    addr_part = str(cleaned_address).strip() if pd.notna(cleaned_address) else ""
+
+    if name_part and addr_part:
+        return f"{name_part} [SEP] {addr_part}"
+    if name_part:
+        return name_part
     if addr_part:
-        return f"{name_part} [SEP] {addr_part}".strip()
-    return f"{name_part} [SEP]".strip() if name_part else ""
+        return addr_part
+    return ""
 
 
 def apply_french_proxy_normalization(name: Optional[str], address: Optional[str]) -> str:

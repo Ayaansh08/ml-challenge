@@ -34,8 +34,8 @@ class TestPairConstruction(unittest.TestCase):
     def test_format_entity_text(self):
         """Test formatting name and address with [SEP] token."""
         self.assertEqual(format_entity_text("Acme Corp", "123 Main St"), "Acme Corp [SEP] 123 Main St")
-        self.assertEqual(format_entity_text("Acme Corp", None), "Acme Corp [SEP]")
-        self.assertEqual(format_entity_text("Acme Corp", ""), "Acme Corp [SEP]")
+        self.assertEqual(format_entity_text("Acme Corp", None), "Acme Corp")
+        self.assertEqual(format_entity_text("Acme Corp", ""), "Acme Corp")
 
     def test_load_and_clean_sources_valid(self):
         """Test loading and cleaning valid sources with proper prefixes."""
