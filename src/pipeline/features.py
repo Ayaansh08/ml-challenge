@@ -414,7 +414,10 @@ def run_feature_engineering(
                 
             writer.write_table(table)
             total_written += len(features_df)
-            break
+            
+            if total_written >= 500_000:
+                print(f"[WARNING] Early stopping feature generation at {total_written} pairs to meet 1-hour time budget constraint.")
+                break
     finally:
         if writer is not None:
             writer.close()

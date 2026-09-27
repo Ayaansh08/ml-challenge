@@ -1,0 +1,203 @@
+Total matched pairs with both names: 17250
+Cross-script pairs (both exist): 2406
+
+Cross-script: S1-965667({'Latin'}) - S3-775321672({'Latin-1', 'Latin'})
+  'Maure Williams Colombier Inc'
+  'Dréxkor'
+
+Cross-script: S1-55344266({'Latin'}) - S2-249013014({'Latin', 'Tamil'})
+  'Raj Investments LLP'
+  'ராஜ் இன்வெஸ்ட்மெண்ட்ஸ் எல்எல்பி'
+
+Cross-script: S1-55344266({'Latin'}) - S3-478195123({'Tamil', 'Latin'})
+  'Raj Investments LLP'
+  'Raj Investments எல்எல்பி'
+
+Cross-script: S1-55344266({'Latin'}) - S3-384364074({'Latin', 'Tamil'})
+  'Raj Investments LLP'
+  'ராஜ் இன்வெஸ்ட்மெண்ட்ஸ் எல்எல்பி'
+
+Cross-script: S1-656753428({'Latin'}) - S2-153058913({'Devanagari', 'Latin'})
+  'Ss Food Private Limited'
+  'एसएस फूड प्राइवेट लिमिटेड'
+
+Cross-script: S1-656753428({'Latin'}) - S2-24659151({'Devanagari', 'Latin'})
+  'Ss Food Private Limited'
+  'एसएस फूड प्राइवेट लिमिटेड'
+
+Cross-script: S1-656753428({'Latin'}) - S3-679606215({'Devanagari', 'Latin'})
+  'Ss Food Private Limited'
+  'एसएस फूड प्राइवेट लिमिटेड'
+
+Cross-script: S1-102811957({'Latin'}) - S2-478959098({'Latin-1', 'Latin'})
+  'Payne Enterprises'
+  'Payne Énterprises'
+
+Cross-script: S1-102811957({'Latin'}) - S3-928796641({'Latin-1', 'Latin'})
+  'Payne Enterprises'
+  'Payne Énterprises'
+
+Cross-script: S1-18727616({'Latin'}) - S3-187831601({'Latin-1', 'Latin'})
+  'Lumay Boral'
+  'Lumay Bóral'
+
+Cross-script: S1-18727616({'Latin'}) - S3-476250621({'Latin-1', 'Latin'})
+  'Lumay Boral'
+  'Lumay Bóral'
+
+Cross-script: S1-318373630({'Latin'}) - S2-660036492({'Devanagari', 'Latin'})
+  'Red Ventures Private Limited'
+  'रेड वेंचर्स प्राइवेट लिमिटेड'
+
+Cross-script: S1-789009573({'Latin'}) - S2-383871912({'Devanagari', 'Latin'})
+  'Hotel Enterprises Limited'
+  'होटल एंटरप्राइजेज लिमिटेड'
+
+Cross-script: S1-789009573({'Latin'}) - S3-576451439({'Latin-1', 'Latin'})
+  'Hotel Enterprises Limited'
+  'Hotel Énterprises Limited'
+
+Cross-script: S1-7293388({'Latin'}) - S2-157073701({'Latin-1', 'Latin'})
+  'Chordia & Partners'
+  'Chordia &-Pártners Ltd'
+
+Cross-script: S1-503957000({'Latin'}) - S2-235117490({'Latin-1', 'Latin'})
+  'AP Hospitality Inc'
+  'AP Hospitality Ínc'
+
+Cross-script: S1-503957000({'Latin'}) - S2-173295926({'Latin-1', 'Latin'})
+  'AP Hospitality Inc'
+  'AP Ínc Center'
+
+Cross-script: S1-692000596({'Latin'}) - S3-164220452({'Latin-1', 'Latin'})
+  'Desai, Alanah, Esq., PC'
+  'Desai, Alanah, Ésq.,'
+
+Cross-script: S1-561341312({'Latin'}) - S2-483615364({'Telugu', 'U+200C', 'Latin'})
+  'Balaji Investment Private Limited'
+  'బాలాజీ ఇన్వెస్ట్\u200cమెంట్ ప్రైవేట్ లిమిటెడ్'
+
+Cross-script: S1-727602285({'Latin'}) - S2-976870196({'Devanagari', 'Latin'})
+  'Swastik Om Solutions LLP'
+  'स्वस्तिक ॐ सॉल्यूशंस एलएलपी'
+
+Cross-script: S1-727602285({'Latin'}) - S2-947230367({'Devanagari', 'Latin'})
+  'Swastik Om Solutions LLP'
+  'स्वस्तिक ॐ सॉल्यूशंस एलएलपी'
+
+Cross-script: S1-292935703({'Latin'}) - S3-421403180({'Latin-1', 'Latin'})
+  'Cozy Grill'
+  'Cozy [Gríll]'
+
+Cross-script: S1-439810025({'Latin'}) - S2-983636768({'Latin-1', 'Latin'})
+  'Tiena L. Hamilton, DDS'
+  'Tiena L. Hamilton, Sérvices'
+
+Cross-script: S1-616588883({'Latin'}) - S3-200505774({'Latin-1', 'Latin'})
+  'Cao Assets Inc'
+  'Cao Ássets Inc'
+
+Cross-script: S1-72444401({'Latin'}) - S2-973800896({'Devanagari', 'Latin'})
+  'New Solutions'
+  'न्यू सॉल्यूशंस'
+
+Cross-script: S1-72444401({'Latin'}) - S2-503949813({'Devanagari', 'Latin'})
+  'New Solutions'
+  'न्यू सॉल्यूशंस'
+
+Cross-script: S1-72444401({'Latin'}) - S3-505153321({'Devanagari', 'Latin'})
+  'New Solutions'
+  'न्यू सॉल्यूशंस'
+
+Cross-script: S1-225984658({'Latin'}) - S2-581845376({'Latin-1', 'Latin'})
+  "Alaine's Fitness"
+  "ALAINE'S FÍTNESS"
+
+Cross-script: S1-842533642({'Latin'}) - S3-764018977({'Latin-1', 'Latin'})
+  'Certified Digital Associates Center'
+  'Certified Dígital Associates'
+
+Cross-script: S1-736418916({'Latin'}) - S2-271186953({'Latin-1', 'Latin'})
+  'Sonipat Engineering'
+  'Sonipat Éngineering'
+
+Cross-script: S1-518197819({'Latin'}) - S2-585132276({'Latin-1', 'Latin'})
+  'Primary Care Clinic LLC'
+  'Primary Care Clínic'
+
+Cross-script: S1-244810289({'Latin'}) - S2-506711361({'Latin-1', 'Latin'})
+  'Celestial Memorial Trust'
+  'Celestial Center Trúst'
+
+Cross-script: S1-989976700({'Latin'}) - S3-279440303({'Latin-1', 'Latin'})
+  'Rowland and Porter Inc'
+  'Rowland and Porter Ínc'
+
+Cross-script: S1-638848187({'Latin'}) - S2-189915219({'Latin-1', 'Latin'})
+  'Capano Labs LLC'
+  'CAPANO LÁBS LLC'
+
+Cross-script: S1-152222475({'Latin'}) - S2-449137844({'Devanagari', 'Latin'})
+  'Ram Maa Logistics Private Limited'
+  'राम मां लॉजिस्टिक्स प्राइवेट लिमिटेड'
+
+Cross-script: S1-439955051({'Latin'}) - S3-158696226({'Latin-1', 'Latin'})
+  'Clean Genomic Collective'
+  'Clean Génomic Collective'
+
+Cross-script: S1-540645835({'Latin'}) - S2-982374245({'Latin-1', 'Latin'})
+  'FLV Holding Private Limited'
+  'FLV HOLDING PRIVATE LÍMITED'
+
+Cross-script: S1-24234371({'Latin'}) - S2-60388632({'Latin-1', 'Latin'})
+  'Education Committee'
+  'Education Cómmittee'
+
+Cross-script: S1-170252930({'Latin'}) - S3-391969183({'Latin-1', 'Latin'})
+  'Keystone Tri-State Ethereum LLC'
+  'Keystone Tri-State Éthereum LLC'
+
+Cross-script: S1-243930232({'Latin'}) - S2-950290299({'Latin-1', 'Latin'})
+  'Q+ State LLC'
+  'Q+ STÁTE LLC'
+
+Cross-script: S1-243930232({'Latin'}) - S2-337942322({'Latin-1', 'Latin'})
+  'Q+ State LLC'
+  'Q+ Státe LLC'
+
+Cross-script: S1-816256578({'Latin'}) - S2-58277947({'Devanagari', 'Latin'})
+  'Sun Software Limited'
+  'सन सॉफ्टवेयर लिमिटेड'
+
+Cross-script: S1-816256578({'Latin'}) - S2-772902621({'Latin-1', 'Latin'})
+  'Sun Software Limited'
+  'Sun Sóftware Limited'
+
+Cross-script: S1-502736054({'Latin'}) - S3-537652714({'Devanagari', 'Latin'})
+  'First Seven Exports Pvt Ltd'
+  'फर्स्ट सेवन एक्सपोर्ट्स प्रा. लि.'
+
+Cross-script: S1-649259801({'Latin'}) - S2-654066445({'Kannada', 'Latin'})
+  'Guru Solutions Pvt Ltd'
+  'ಗುರು ಸೊಲ್ಯೂಷನ್ಸ್ ಪ್ರೈವೇಟ್ ಲಿಮಿಟೆಡ್'
+
+Cross-script: S1-927655670({'Latin'}) - S2-226884833({'Devanagari', 'Latin'})
+  'Jain Marketing Private Limited'
+  'जैन मार्केटिंग प्राइवेट लिमिटेड'
+
+Cross-script: S1-26175016({'Latin'}) - S2-795484451({'Latin-1', 'Latin'})
+  'Cozy Hair Studio'
+  'Cozy Háir Studio'
+
+Cross-script: S1-185938539({'Latin'}) - S3-880695057({'Latin-1', 'Latin'})
+  'Sai (India) (india) Private Limited'
+  'Private Sai (India) (india) Límited'
+
+Cross-script: S1-185938539({'Latin'}) - S3-379662508({'Latin-1', 'Latin'})
+  'Sai (India) (india) Private Limited'
+  'Sai (India) (Índia) Private Limited'
+
+Cross-script: S1-654156225({'Latin'}) - S3-871798312({'Latin-1', 'Latin'})
+  'KBM Research Private Limited'
+  'KBM Research Private Límited'
+

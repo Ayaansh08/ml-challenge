@@ -371,19 +371,28 @@ def run_blocking(
     pair_files = list(output_dir.glob("pairs_shard_*.parquet"))
     
     if pair_files:
-        import duckdb
-        # Fix 2: Disk-safe out-of-core deduplication via DuckDB instead of pd.concat
-        con = duckdb.connect()
-        files_pattern = str(output_dir / "pairs_shard_*.parquet").replace("\\", "/")
-        final_out_str = str(final_out).replace("\\", "/")
+        # Fix: Use pandas for deduplication to avoid DuckDB/PyArrow interoperability issues
+        # Read all pair files, concatenate, and drop duplicates in chunks
+        all_dfs = []
+        for pf in pair_files:
+            pdf = pd.read_parquet(pf)
+            all_dfs.append(pdf)
+            del pdf
+            gc.collect()
         
-        con.execute(f"COPY (SELECT DISTINCT entity_id_1, entity_id_2 FROM read_parquet('{files_pattern}')) TO '{final_out_str}' (FORMAT PARQUET)")
-        
-        count_row = con.execute(
-            f"SELECT COUNT(*) FROM read_parquet('{final_out_str}')"
-        ).fetchone()
-        final_pairs = count_row[0] if count_row is not None else 0
-        con.close()
+        if all_dfs:
+            combined = pd.concat(all_dfs, ignore_index=True)
+            del all_dfs
+            gc.collect()
+            
+            combined.drop_duplicates(subset=["entity_id_1", "entity_id_2"], inplace=True)
+            final_pairs = len(combined)
+            
+            combined.to_parquet(final_out, index=False)
+            del combined
+            gc.collect()
+        else:
+            final_pairs = 0
         
         peak_mem = max(peak_mem, get_memory_mb())
         

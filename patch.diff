@@ -1,0 +1,174 @@
+--- src/pipeline/features.py
++++ src/pipeline/features.py
+@@ -282,34 +270,30 @@
+     pairs_df : pd.DataFrame
+         DataFrame with columns ['entity_id_1', 'entity_id_2'].
+-    cleaned_s1 : pd.DataFrame
+-        Cleaned data from Source 1.
+-    cleaned_s2 : pd.DataFrame
+-        Cleaned data from Source 2.
+-    cleaned_s3 : pd.DataFrame
+-        Cleaned data from Source 3.
++    combined_lookup : pd.DataFrame
++        Combined cleaned data with 'cleaned_entity_id' as index.
+     embedding_sims : Optional[np.ndarray], default=None
+         Precomputed embedding similarities aligned with pairs_df rows.
+-    id_col : str
+-        Column name for entity ID in cleaned DataFrames.
+ 
+     Returns
+     -------
+     pd.DataFrame
+         Feature matrix with one row per candidate pair.
+     """
+-    # Build lookup dictionaries for fast O(1) retrieval
+-    s1_lookup = cleaned_s1.set_index(id_col).to_dict("index")
+-    s2_lookup = cleaned_s2.set_index(id_col).to_dict("index")
+-    s3_lookup = cleaned_s3.set_index(id_col).to_dict("index")
+-
+-    def get_record(eid: str) -> pd.Series:
+-        if eid.startswith("S1-"):
+-            return pd.Series(s1_lookup.get(eid, {}))
+-        elif eid.startswith("S2-"):
+-            return pd.Series(s2_lookup.get(eid, {}))
+-        elif eid.startswith("S3-"):
+-            return pd.Series(s3_lookup.get(eid, {}))
+-        return pd.Series({})
++    recs1 = combined_lookup.reindex(pairs_df["entity_id_1"].values)
++    recs2 = combined_lookup.reindex(pairs_df["entity_id_2"].values)
+ 
+-    feature_rows = []
+-    for position, (_, row) in enumerate(pairs_df.iterrows()):
+-        eid1 = row["entity_id_1"]
+-        eid2 = row["entity_id_2"]
++    recs1_dicts = recs1.to_dict("records")
++    recs2_dicts = recs2.to_dict("records")
+ 
+-        rec1 = get_record(eid1)
+-        rec2 = get_record(eid2)
++    feature_rows = []
++    for i in range(len(pairs_df)):
++        r1 = recs1_dicts[i]
++        r2 = recs2_dicts[i]
+ 
+-        if rec1.empty or rec2.empty:
++        if pd.isna(r1.get("cleaned_name")) and pd.isna(r1.get("cleaned_address")) and pd.isna(r1.get("cleaned_country")):
++            continue
++        if pd.isna(r2.get("cleaned_name")) and pd.isna(r2.get("cleaned_address")) and pd.isna(r2.get("cleaned_country")):
+             continue
+ 
+-        emb_sim = embedding_sims[position] if embedding_sims is not None else None
+-        feats = compute_pair_features(rec1, rec2, emb_sim)
+-        feats["entity_id_1"] = eid1
+-        feats["entity_id_2"] = eid2
++        emb_sim = embedding_sims[i] if embedding_sims is not None else None
++        feats = compute_pair_features(r1, r2, emb_sim)
++        feats["entity_id_1"] = pairs_df.iloc[i]["entity_id_1"]
++        feats["entity_id_2"] = pairs_df.iloc[i]["entity_id_2"]
+         feature_rows.append(feats)
+ 
+     return pd.DataFrame(feature_rows)
+@@ -367,12 +349,15 @@
+     if not s1_files or not s2_files or not s3_files:
+         raise FileNotFoundError("Missing cleaned parquet files for one or more sources")
+ 
+-    print("[INFO] Loading cleaned Source 1...")
+-    s1_df = pd.concat([pd.read_parquet(f) for f in s1_files], ignore_index=True)
+-    print("[INFO] Loading cleaned Source 2...")
+-    s2_df = pd.concat([pd.read_parquet(f) for f in s2_files], ignore_index=True)
+-    print("[INFO] Loading cleaned Source 3...")
+-    s3_df = pd.concat([pd.read_parquet(f) for f in s3_files], ignore_index=True)
++    print("[INFO] Loading cleaned sources into memory-efficient DataFrame...")
++    cols = ["cleaned_entity_id", "cleaned_name", "cleaned_address", "cleaned_country"]
++    
++    s1_df = pd.concat([pd.read_parquet(f, columns=cols) for f in s1_files], ignore_index=True)
++    s2_df = pd.concat([pd.read_parquet(f, columns=cols) for f in s2_files], ignore_index=True)
++    s3_df = pd.concat([pd.read_parquet(f, columns=cols) for f in s3_files], ignore_index=True)
++
++    print("[INFO] Building unified lookup DataFrame...")
++    combined_lookup = pd.concat([s1_df, s2_df, s3_df], ignore_index=True).set_index("cleaned_entity_id")
+ 
+     # Load candidate pairs
+     pairs_pf = pq.ParquetFile(candidate_pairs_path)
+@@ -385,44 +370,45 @@
+         embedding_sims = np.load(embedding_sims_path)
+         print(f"[INFO] Loaded embedding similarities: {embedding_sims.shape}")
+ 
+-    # Process in chunks
+-    all_features = []
++    # Process in chunks and stream to disk
+     emb_idx = 0
+-
+-    for batch_idx, batch in enumerate(pairs_pf.iter_batches(batch_size=chunksize)):
+-        pairs_chunk = batch.to_pandas()
+-        
+-        chunk_emb = None
+-        if embedding_sims is not None:
+-            chunk_end = min(emb_idx + len(pairs_chunk), len(embedding_sims))
+-            chunk_emb = embedding_sims[emb_idx:chunk_end]
+-            emb_idx = chunk_end
+-
+-        print(f"[INFO] Computing features for chunk {batch_idx + 1} ({len(pairs_chunk):,} pairs)...")
+-        features_df = compute_features_batch(
+-            pairs_chunk, s1_df, s2_df, s3_df, chunk_emb
+-        )
+-        all_features.append(features_df)
+-
+-        if len(all_features) >= 10:
+-            # Flush periodically
+-            combined = pd.concat(all_features, ignore_index=True)
+-            chunk_out = out_path.parent / f"features_chunk_{batch_idx}.parquet"
+-            combined.to_parquet(chunk_out, index=False)
+-            all_features = []
+-
+-    # Final flush combining any flushed chunks with remaining batches
+-    chunk_files = sorted(out_path.parent.glob("features_chunk_*.parquet"))
+-    if chunk_files or all_features:
+-        dfs = [pd.read_parquet(cf) for cf in chunk_files] + all_features
+-        final_df = pd.concat(dfs, ignore_index=True)
+-        final_df.to_parquet(out_path, index=False)
+-        for cf in chunk_files:
+-            try:
+-                cf.unlink()
+-            except OSError:
+-                pass
+-        print(f"[INFO] Saved feature matrix: {out_path} ({len(final_df):,} rows, {len(final_df.columns)} features)")
++    import pyarrow as pa
++    writer = None
++    total_written = 0
++    num_cols = 0
++
++    try:
++        for batch_idx, batch in enumerate(pairs_pf.iter_batches(batch_size=chunksize)):
++            pairs_chunk = batch.to_pandas()
++            
++            chunk_emb = None
++            if embedding_sims is not None:
++                chunk_end = min(emb_idx + len(pairs_chunk), len(embedding_sims))
++                chunk_emb = embedding_sims[emb_idx:chunk_end]
++                emb_idx = chunk_end
++
++            print(f"[INFO] Computing features for chunk {batch_idx + 1} ({len(pairs_chunk):,} pairs)...")
++            features_df = compute_features_batch(
++                pairs_chunk, combined_lookup, chunk_emb
++            )
++            
++            if features_df.empty:
++                continue
++                
++            table = pa.Table.from_pandas(features_df, preserve_index=False)
++            
++            if writer is None:
++                writer = pq.ParquetWriter(out_path, table.schema)
++                num_cols = len(features_df.columns)
++                
++            writer.write_table(table)
++            total_written += len(features_df)
++    finally:
++        if writer is not None:
++            writer.close()
++
++    if total_written > 0:
++        print(f"[INFO] Saved feature matrix: {out_path} ({total_written:,} rows, {num_cols} features)")
+     else:
+         print("[WARNING] No features computed")

@@ -180,9 +180,11 @@ def train_matcher(
             "n_jobs": -1,
         }
 
-    # Stratified train/val split
+    # Stratified train/val split (safely fallback if class has < 2 samples)
+    min_class_count = labels.value_counts().min() if hasattr(labels, "value_counts") else pd.Series(labels).value_counts().min()
+    stratify_arg = labels if min_class_count >= 2 else None
     X_train, X_val, y_train, y_val = train_test_split(
-        features_df, labels, test_size=test_size, stratify=labels, random_state=random_state
+        features_df, labels, test_size=test_size, stratify=stratify_arg, random_state=random_state
     )
 
     # Create LightGBM datasets
