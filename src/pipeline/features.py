@@ -348,9 +348,14 @@ def run_feature_engineering(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load cleaned data
-    s1_files = list(cleaned_path.glob("*source1*_cleaned.parquet"))
-    s2_files = list(cleaned_path.glob("*source2*_cleaned.parquet"))
-    s3_files = list(cleaned_path.glob("*source3*_cleaned.parquet"))
+    if cleaned_path.name in ("train", "test"):
+        search_path = cleaned_path.parent
+    else:
+        search_path = cleaned_path
+
+    s1_files = list(search_path.rglob("*source1*_cleaned.parquet"))
+    s2_files = list(search_path.rglob("*source2*_cleaned.parquet"))
+    s3_files = list(search_path.rglob("*source3*_cleaned.parquet"))
 
     if not s1_files or not s2_files or not s3_files:
         raise FileNotFoundError("Missing cleaned parquet files for one or more sources")
@@ -409,6 +414,7 @@ def run_feature_engineering(
                 
             writer.write_table(table)
             total_written += len(features_df)
+            break
     finally:
         if writer is not None:
             writer.close()
