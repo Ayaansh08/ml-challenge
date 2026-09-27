@@ -163,6 +163,53 @@ def load_and_clean_sources(
     return cleaned_dict
 
 
+def _build_text_map(df: pd.DataFrame) -> Dict[str, str]:
+    """Build a lookup mapping entity_id -> formatted entity text using vectorized operations."""
+    if df.empty:
+        return {}
+
+    # Prefer 'cleaned_entity_id', fallback to 'entity_id'
+    if "cleaned_entity_id" in df.columns and "entity_id" in df.columns:
+        valid_cid = df["cleaned_entity_id"].notna() & (df["cleaned_entity_id"] != "")
+        eid_series = df["cleaned_entity_id"].where(valid_cid, df["entity_id"])
+    elif "cleaned_entity_id" in df.columns:
+        eid_series = df["cleaned_entity_id"]
+    elif "entity_id" in df.columns:
+        eid_series = df["entity_id"]
+    else:
+        return {}
+
+    valid_mask = eid_series.notna() & (eid_series != "")
+    if not valid_mask.any():
+        return {}
+
+    valid_eids = eid_series[valid_mask].astype(str)
+
+    if "cleaned_name" in df.columns:
+        name_s = df["cleaned_name"][valid_mask].fillna("").astype(str).str.strip()
+    else:
+        name_s = pd.Series("", index=valid_eids.index)
+
+    if "cleaned_address" in df.columns:
+        addr_s = df["cleaned_address"][valid_mask].fillna("").astype(str).str.strip()
+    else:
+        addr_s = pd.Series("", index=valid_eids.index)
+
+    has_name = (name_s != "").to_numpy()
+    has_addr = (addr_s != "").to_numpy()
+    both = has_name & has_addr
+    only_name = has_name & (~both)
+    only_addr = has_addr & (~both)
+
+    text_arr = np.empty(len(valid_eids), dtype=object)
+    text_arr.fill("")
+    text_arr[both] = (name_s[both] + " [SEP] " + addr_s[both]).to_numpy()
+    text_arr[only_name] = name_s[only_name].to_numpy()
+    text_arr[only_addr] = addr_s[only_addr].to_numpy()
+
+    return dict(zip(valid_eids.values, text_arr))
+
+
 def build_positive_pairs(
     ground_truth_path: Union[str, Path],
     cleaned_s1: pd.DataFrame,
@@ -204,28 +251,14 @@ def build_positive_pairs(
     gt_df[s1_col] = gt_df[s1_col].astype(str).map(normalize_whitespace)
     gt_df[matches_col] = gt_df[matches_col].astype(str).map(normalize_missing)
 
-    # Build lookup dictionaries for fast O(1) text retrieval
-    s1_text_map: Dict[str, str] = {}
-    for _, row in cleaned_s1.iterrows():
-        eid = row.get("cleaned_entity_id") or row.get("entity_id")
-        if eid:
-            s1_text_map[eid] = format_entity_text(row.get("cleaned_name"), row.get("cleaned_address"))
-
-    s2_text_map: Dict[str, str] = {}
-    for _, row in cleaned_s2.iterrows():
-        eid = row.get("cleaned_entity_id") or row.get("entity_id")
-        if eid:
-            s2_text_map[eid] = format_entity_text(row.get("cleaned_name"), row.get("cleaned_address"))
-
-    s3_text_map: Dict[str, str] = {}
-    for _, row in cleaned_s3.iterrows():
-        eid = row.get("cleaned_entity_id") or row.get("entity_id")
-        if eid:
-            s3_text_map[eid] = format_entity_text(row.get("cleaned_name"), row.get("cleaned_address"))
+    # Build lookup dictionaries for fast O(1) text retrieval using vectorized operations
+    s1_text_map: Dict[str, str] = _build_text_map(cleaned_s1)
+    s2_text_map: Dict[str, str] = _build_text_map(cleaned_s2)
+    s3_text_map: Dict[str, str] = _build_text_map(cleaned_s3)
 
     # Optionally filter GT to S1 entities in cleaned_s1
     if filter_to_s1_ids:
-        gt_df = gt_df[gt_df[s1_col].isin(s1_text_map)].copy()
+        gt_df = gt_df[gt_df[s1_col].isin(s1_text_map)]
 
     records: List[Dict[str, str]] = []
     singleton_count = 0
@@ -305,7 +338,8 @@ def grouped_train_val_split(
         return positive_pairs_df.copy(), positive_pairs_df.copy()
 
     gss = GroupShuffleSplit(n_splits=1, test_size=val_fraction, random_state=random_seed)
-    groups = positive_pairs_df["s1_entity_id"].values
+    # Materialize the pandas column as a NumPy array for sklearn's typed API.
+    groups = np.asarray(positive_pairs_df["s1_entity_id"])
     train_idx, val_idx = next(gss.split(positive_pairs_df, groups=groups))
 
     train_df = positive_pairs_df.iloc[train_idx].reset_index(drop=True)
@@ -553,7 +587,10 @@ def write_pair_dataset(
             cntry_map = dict(zip(cleaned_s1[id_col], cleaned_s1[cntry_col].fillna("UNKNOWN")))
             if not positive_pairs_df.empty:
                 s1_countries = positive_pairs_df["s1_entity_id"].map(cntry_map).fillna("UNKNOWN")
-                country_breakdown = s1_countries.value_counts().to_dict()
+                country_breakdown = {
+                    str(country): int(count)
+                    for country, count in s1_countries.value_counts().items()
+                }
 
     summary: Dict[str, Any] = {
         "dataset_summary": {

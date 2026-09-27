@@ -6,7 +6,7 @@ on candidate pairs from blocking for the LightGBM classifier (Phase 5).
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -199,12 +199,18 @@ def compute_pair_features(
     Dict[str, float]
         Dictionary of feature name -> value.
     """
-    name1 = row1.get("cleaned_name", "") or ""
-    name2 = row2.get("cleaned_name", "") or ""
-    addr1 = row1.get("cleaned_address", "") or ""
-    addr2 = row2.get("cleaned_address", "") or ""
-    country1 = row1.get("cleaned_country", "") or ""
-    country2 = row2.get("cleaned_country", "") or ""
+    def _clean_field(val: Any) -> str:
+        if val is None or pd.isna(val):
+            return ""
+        s = str(val).strip()
+        return "" if s.lower() in ("nan", "none", "null") else s
+
+    name1 = _clean_field(row1.get("cleaned_name"))
+    name2 = _clean_field(row2.get("cleaned_name"))
+    addr1 = _clean_field(row1.get("cleaned_address"))
+    addr2 = _clean_field(row2.get("cleaned_address"))
+    country1 = _clean_field(row1.get("cleaned_country"))
+    country2 = _clean_field(row2.get("cleaned_country"))
 
     features = {}
 
@@ -405,10 +411,17 @@ def run_feature_engineering(
             combined.to_parquet(chunk_out, index=False)
             all_features = []
 
-    # Final flush
-    if all_features:
-        final_df = pd.concat(all_features, ignore_index=True)
+    # Final flush combining any flushed chunks with remaining batches
+    chunk_files = sorted(out_path.parent.glob("features_chunk_*.parquet"))
+    if chunk_files or all_features:
+        dfs = [pd.read_parquet(cf) for cf in chunk_files] + all_features
+        final_df = pd.concat(dfs, ignore_index=True)
         final_df.to_parquet(out_path, index=False)
+        for cf in chunk_files:
+            try:
+                cf.unlink()
+            except OSError:
+                pass
         print(f"[INFO] Saved feature matrix: {out_path} ({len(final_df):,} rows, {len(final_df.columns)} features)")
     else:
         print("[WARNING] No features computed")

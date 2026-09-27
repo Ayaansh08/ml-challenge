@@ -78,3 +78,12 @@ palace/
 roster-backups/
 roster.json
 hallways.json
+
+# Temporary Agent Scratch Files
+inspect_pairs.py
+synthetic_test.py
+test_assertions.py
+tiny_test.py
+devanagari_samples.txt
+non_ascii_chars.txt
+
