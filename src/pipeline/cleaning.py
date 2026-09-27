@@ -5,6 +5,7 @@ Handles messy real-world entity resolution patterns including:
 - Leading/trailing whitespace on entity IDs and text fields
 - Missing/NaN representation variants (None, NaN, "", "NaN", "nan", "null")
 - Multi-script preservation (NFKC Unicode normalization, Devanagari/non-Latin scripts)
+- Cross-script transliteration (Indic scripts → Latin for matching)
 - Legal suffix/prefix expansion across leading and trailing positions
 - Bare domain detection
 - Address parsing (casefolding, abbreviation expansion, landmark extraction, postal code/street number parsing)
@@ -16,6 +17,15 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
+
+# Optional import for Indic script transliteration
+try:
+    from indic_transliteration import sanscript
+    from indic_transliteration.sanscript import SchemeMap, SCHEMES, transliterate
+    INDIC_TRANSLITERATION_AVAILABLE = True
+except ImportError:
+    INDIC_TRANSLITERATION_AVAILABLE = False
+    sanscript = None
 
 # ---------------------------------------------------------------------------
 # Constants & Synonym Tables
@@ -67,6 +77,80 @@ LEGAL_SYNONYMS: List[Tuple[str, str]] = [
     (r"\bpvt\.?(?=\s|$)", "private"),
     (r"\bpte\.?(?=\s|$)", "private"),
     (r"\bpty\.?(?=\s|$)", "proprietary"),
+# Indic legal suffixes (Devanagari, transliterated forms)
+    # Use (?<!\S)/(?!\S) instead of \b for Unicode script compatibility
+    (r"(?<!\S)प्राइवेट\s+लिमिटेड(?!\S)", "private limited"),
+    (r"(?<!\S)प्रा\.\s*लि\.(?!\S)", "private limited"),
+    (r"(?<!\S)लिमिटेड(?!\S)", "limited"),
+    (r"(?<!\S)एलएलपी(?!\S)", "llp"),
+    (r"(?<!\S)प्राइवेट(?!\S)", "private"),
+    (r"(?<!\S)पब्लिक\s+लिमिटेड(?!\S)", "public limited"),
+    (r"(?<!\S)सार्वजनिक\s+कंपनी(?!\S)", "public company"),
+    # Bengali legal suffixes
+    (r"(?<!\S)প্রাইভেট\s+লিমিটেড(?!\S)", "private limited"),
+    (r"(?<!\S)লিমিটেড(?!\S)", "limited"),
+    (r"(?<!\S)এলএলপি(?!\S)", "llp"),
+    # Gurmukhi legal suffixes
+    (r"(?<!\S)ਪ੍ਰਾਈਵੇਟ\s+ਲਿਮਟਿਡ(?!\S)", "private limited"),
+    (r"(?<!\S)ਲਿਮਟਿਡ(?!\S)", "limited"),
+    (r"(?<!\S)ਐਲਐਲਪੀ(?!\S)", "llp"),
+    # Gujarati legal suffixes
+    (r"(?<!\S)પ્રાઇવેટ\s+લિમિટેડ(?!\S)", "private limited"),
+    (r"(?<!\S)લિમિટેડ(?!\S)", "limited"),
+    (r"(?<!\S)એલએલપી(?!\S)", "llp"),
+    # Tamil legal suffixes
+    (r"(?<!\S)பிரைவேட்\s+லிமிடெட்(?!\S)", "private limited"),
+    (r"(?<!\S)லிமிடெட்(?!\S)", "limited"),
+    (r"(?<!\S)எல்எல்பி(?!\S)", "llp"),
+    # Telugu legal suffixes
+    (r"(?<!\S)ప్రైవెట్\s+లిమిటెడ్(?!\S)", "private limited"),
+    (r"(?<!\S)లిమిటెడ్(?!\S)", "limited"),
+    (r"(?<!\S)ఎల్ఎల్పి(?!\S)", "llp"),
+    # Kannada legal suffixes
+    (r"(?<!\S)ಪ್ರೈವೇಟ್\s+ಲಿಮಿಟೆಡ್(?!\S)", "private limited"),
+    (r"(?<!\S)ಲಿಮಿಟೆಡ್(?!\S)", "limited"),
+    (r"(?<!\S)ಎಲ್ಎಲ್ಪಿ(?!\S)", "llp"),
+    # Malayalam legal suffixes
+    (r"(?<!\S)പ്രൈവറ്റ്\s+ലിമിറ്റഡ്(?!\S)", "private limited"),
+(r"(?<!\S)ലിമിറ്റഡ്(?!\S)", "limited"),
+    (r"(?<!\S)എല്‍എല്‍പി(?!\S)", "llp"),
+    # IAST transliterated Indic legal suffixes (from indic-transliteration)
+    # Devanagari
+    (r"\bpr[āa]ive[ṭṭ]a\s+l[īi]mi[ṭṭ]e[ḍḍ]a\b", "private limited"),
+    (r"\bpr[āa]\.\s*l[īi]\.\b", "private limited"),
+    (r"\bl[īi]mi[ṭṭ]e[ḍḍ]a\b", "limited"),
+    (r"\bel[ell]p[īi]\b", "llp"),
+    (r"\bpr[āa]ive[ṭṭ]a\b", "private"),
+    (r"\bpabl[īi]k\s+l[īi]mi[ṭṭ]e[ḍḍ]a\b", "public limited"),
+    (r"\bs[āa]rvajan[īi]k\s+k[āa]mpan[īi]\b", "public company"),
+    # Bengali
+    (r"\bpr[āa]ibhe[ṭṭ]e\s+l[īi]mi[ṭṭ]e[ḍḍ]e\b", "private limited"),
+    (r"\bl[īi]mi[ṭṭ]e[ḍḍ]e\b", "limited"),
+    (r"\bel[ell]p[īi]\b", "llp"),
+    # Gurmukhi
+    (r"\bpr[āa]iv[ēe]ṭe\s+l[īi]maṭiḍ\b", "private limited"),
+    (r"\bl[īi]maṭiḍ\b", "limited"),
+    (r"\baillp[īi]\b", "llp"),
+    # Gujarati
+    (r"\bpr[āa]iv[ēe]ṭ\s+l[īi]miṭeḍ\b", "private limited"),
+    (r"\bl[īi]miṭeḍ\b", "limited"),
+    (r"\bel[ell]p[īi]\b", "llp"),
+    # Tamil
+    (r"\bpiraiv[ēe]ṭ\s+limiḍeḍ\b", "private limited"),
+    (r"\blimiḍeḍ\b", "limited"),
+    (r"\bel[l]lbh[īi]\b", "llp"),
+    # Telugu
+    (r"\bpr[āa]iv[ēe]ṭ\s+limiṭeḍ\b", "private limited"),
+    (r"\blimiṭeḍ\b", "limited"),
+    (r"\bel[l]lp[īi]\b", "llp"),
+    # Kannada
+    (r"\bpraive[ṭṭ]\s+l[īi]miṭeḍ\b", "private limited"),
+    (r"\bl[īi]miṭeḍ\b", "limited"),
+    (r"\bel[l]lp[īi]\b", "llp"),
+    # Malayalam
+    (r"\bpraiv[ēe]ṭ\s+limiṭṭ\b", "private limited"),
+    (r"\blimiṭṭ\b", "limited"),
+    (r"\bel[l]lp[īi]\b", "llp"),
 ]
 
 # Bare domain regex (detects domain names without surrounding business name tokens)
@@ -118,6 +202,150 @@ STREET_NUMBER_REGEX = re.compile(
     r"\b(?:(?:no\.?|plot|house|flat|unit|shop|#|suite|apt)\s*)?([0-9]+[a-zA-Z]?(?:[/-][0-9]+[a-zA-Z]?)?)\b",
     re.IGNORECASE,
 )
+
+# ---------------------------------------------------------------------------
+# Indic Script Detection & Transliteration
+# ---------------------------------------------------------------------------
+
+# Unicode script ranges for Indic scripts
+SCRIPT_RANGES = {
+    "devanagari": (0x0900, 0x097F),
+    "bengali": (0x0980, 0x09FF),
+    "gurmukhi": (0x0A00, 0x0A7F),
+    "gujarati": (0x0A80, 0x0AFF),
+    "oriya": (0x0B00, 0x0B7F),
+    "tamil": (0x0B80, 0x0BFF),
+    "telugu": (0x0C00, 0x0C7F),
+    "kannada": (0x0C80, 0x0CFF),
+    "malayalam": (0x0D00, 0x0D7F),
+}
+
+# Map script names to sanscript scheme codes
+SANSCRIPT_SCHEMES = {
+    "devanagari": sanscript.DEVANAGARI if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "bengali": sanscript.BENGALI if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "gurmukhi": sanscript.GURMUKHI if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "gujarati": sanscript.GUJARATI if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "oriya": sanscript.ORIYA if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "tamil": sanscript.TAMIL if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "telugu": sanscript.TELUGU if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "kannada": sanscript.KANNADA if INDIC_TRANSLITERATION_AVAILABLE else None,
+    "malayalam": sanscript.MALAYALAM if INDIC_TRANSLITERATION_AVAILABLE else None,
+}
+
+# Target transliteration scheme (IAST for romanization)
+TARGET_SCHEME = sanscript.IAST if INDIC_TRANSLITERATION_AVAILABLE else None
+
+
+def detect_script(text: str) -> Optional[str]:
+    """Detect the primary Indic script in a text string.
+    
+    Returns the script name (e.g., 'devanagari', 'tamil') or None if no Indic script detected.
+    If multiple scripts present, returns the one with the most characters.
+    """
+    if not text:
+        return None
+    
+    script_counts: Dict[str, int] = {script: 0 for script in SCRIPT_RANGES}
+    
+    for char in text:
+        cp = ord(char)
+        for script, (start, end) in SCRIPT_RANGES.items():
+            if start <= cp <= end:
+                script_counts[script] += 1
+                break
+    
+    if not any(script_counts.values()):
+        return None
+    
+    return max(script_counts, key=script_counts.get)
+
+
+def transliterate_to_latin(text: Optional[str]) -> Optional[str]:
+    """Transliterate Indic script text to Latin (IAST romanization).
+    
+    If indic-transliteration is not available or no Indic script detected,
+    returns the original text unchanged.
+    
+    Parameters
+    ----------
+    text : Optional[str]
+        Input text that may contain Indic scripts.
+        
+    Returns
+    -------
+    Optional[str]
+        Romanized text, or original text if no transliteration needed/possible.
+    """
+    if not text or not INDIC_TRANSLITERATION_AVAILABLE:
+        return text
+    
+    script = detect_script(text)
+    if script is None or script not in SANSCRIPT_SCHEMES:
+        return text
+    
+    source_scheme = SANSCRIPT_SCHEMES[script]
+    if source_scheme is None:
+        return text
+    
+    try:
+        return transliterate(text, source_scheme, TARGET_SCHEME)
+    except Exception:
+        # Fallback: return original text if transliteration fails
+        return text
+
+
+def clean_name(name: Optional[Any]) -> Optional[str]:
+    """Clean and normalize business entity name for comparison.
+
+    Steps applied:
+    1. Check for missing values (returns None if missing).
+    2. Unicode NFKC normalization (preserves non-ASCII / Devanagari / multilingual scripts).
+    3. Expand native Indic legal suffixes BEFORE transliteration (so native patterns match).
+    4. Transliterate Indic scripts to Latin (IAST) for cross-script matching.
+    5. Lowercase conversion for standardized matching.
+    6. Strip leading junk tokens (e.g. leading dashes '--', stray punctuation, asterisks).
+    7. Normalize '&' <-> 'and' (converts '&' to 'and' with proper token spacing).
+    8. Expand legal suffix/prefix abbreviations via synonym table (both leading and trailing).
+    9. Normalize and collapse residual whitespace.
+
+    Note: Non-ASCII characters (e.g. Hindi / Devanagari) are transliterated to Latin
+    for matching compatibility, while preserving original in source data.
+    """
+    val = normalize_missing(name)
+    if val is None:
+        return None
+
+    # 1. Unicode NFKC normalization
+    normalized = unicodedata.normalize("NFKC", val)
+
+    # 2. Expand native Indic legal suffixes BEFORE transliteration
+    # This allows native script patterns in LEGAL_SYNONYMS to match
+    for pattern, expansion in LEGAL_SYNONYMS:
+        normalized = re.sub(pattern, expansion, normalized, flags=re.IGNORECASE)
+
+    # 3. Transliterate Indic scripts to Latin for cross-script matching
+    normalized = transliterate_to_latin(normalized)
+
+    # 4. Lowercase for comparison copy
+    normalized = normalized.lower()
+
+    # 5. Strip leading junk tokens (leading dashes, bullets, quotes, stray punctuation runs)
+    normalized = re.sub(r"^[\s\-_.,:;*#~!?/\\+|=]+", "", normalized)
+    normalized = re.sub(r"[\s\-_.,:;*#~!?/\\+|=]+$", "", normalized)
+
+    # 6. Normalize '&' to 'and'
+    # Handles standard '&' and fullwidth '＆'
+    normalized = re.sub(r"\s*[&＆]\s*", " and ", normalized)
+
+    # 7. Expand legal prefix/suffix abbreviations (both leading and trailing positions)
+    # This catches Latin patterns and transliterated forms
+    for pattern, expansion in LEGAL_SYNONYMS:
+        normalized = re.sub(pattern, expansion, normalized, flags=re.IGNORECASE)
+
+    # 8. Collapse internal whitespace and strip
+    cleaned = normalize_whitespace(normalized)
+    return cleaned if cleaned else None
 
 
 # ---------------------------------------------------------------------------
@@ -180,48 +408,6 @@ def is_bare_domain(name: Optional[Any]) -> bool:
     return bool(DOMAIN_PATTERN.match(clean))
 
 
-def clean_name(name: Optional[Any]) -> Optional[str]:
-    """Clean and normalize business entity name for comparison.
-
-    Steps applied:
-    1. Check for missing values (returns None if missing).
-    2. Unicode NFKC normalization (preserves non-ASCII / Devanagari / multilingual scripts).
-    3. Lowercase conversion for standardized matching.
-    4. Strip leading junk tokens (e.g. leading dashes '--', stray punctuation, asterisks).
-    5. Normalize '&' <-> 'and' (converts '&' to 'and' with proper token spacing).
-    6. Expand legal suffix/prefix abbreviations via synonym table (both leading and trailing).
-    7. Normalize and collapse residual whitespace.
-
-    Note: Non-ASCII characters (e.g. Hindi / Devanagari) survive unchanged.
-    """
-    val = normalize_missing(name)
-    if val is None:
-        return None
-
-    # 1. Unicode NFKC normalization
-    normalized = unicodedata.normalize("NFKC", val)
-
-    # 2. Lowercase for comparison copy
-    normalized = normalized.lower()
-
-    # 3. Strip leading junk tokens (leading dashes, bullets, quotes, stray punctuation runs)
-    normalized = re.sub(r"^[\s\-_.,:;*#~!?/\\+|=]+", "", normalized)
-    normalized = re.sub(r"[\s\-_.,:;*#~!?/\\+|=]+$", "", normalized)
-
-    # 4. Normalize '&' to 'and'
-    # Handles standard '&' and fullwidth '＆'
-    normalized = re.sub(r"\s*[&＆]\s*", " and ", normalized)
-
-    # 5. Expand legal prefix/suffix abbreviations (both leading and trailing positions)
-    for pattern, expansion in LEGAL_SYNONYMS:
-        # Check and expand across whole string via word boundary regex
-        normalized = re.sub(pattern, expansion, normalized, flags=re.IGNORECASE)
-
-    # 6. Collapse internal whitespace and strip
-    cleaned = normalize_whitespace(normalized)
-    return cleaned if cleaned else None
-
-
 def clean_address(address: Optional[Any]) -> Dict[str, Optional[str]]:
     """Clean and parse address into normalized components.
 
@@ -243,6 +429,8 @@ def clean_address(address: Optional[Any]) -> Dict[str, Optional[str]]:
 
     # Unicode NFKC normalization and casefold (handles ALL-CAPS sources)
     addr_str = unicodedata.normalize("NFKC", val).casefold()
+    # Transliterate Indic scripts to Latin for cross-script matching
+    addr_str = transliterate_to_latin(addr_str)
     addr_str = normalize_whitespace(addr_str) or ""
 
     # 1. Extract Landmark Phrases ("near X", "opp. X", "behind X", etc.)

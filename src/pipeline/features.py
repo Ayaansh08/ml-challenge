@@ -306,7 +306,7 @@ def compute_features_batch(
         return pd.Series({})
 
     feature_rows = []
-    for idx, row in pairs_df.iterrows():
+    for position, (_, row) in enumerate(pairs_df.iterrows()):
         eid1 = row["entity_id_1"]
         eid2 = row["entity_id_2"]
 
@@ -316,7 +316,7 @@ def compute_features_batch(
         if rec1.empty or rec2.empty:
             continue
 
-        emb_sim = embedding_sims[idx] if embedding_sims is not None else None
+        emb_sim = embedding_sims[position] if embedding_sims is not None else None
         feats = compute_pair_features(rec1, rec2, emb_sim)
         feats["entity_id_1"] = eid1
         feats["entity_id_2"] = eid2

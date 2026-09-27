@@ -10,7 +10,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import pyarrow as pa
@@ -171,28 +171,44 @@ def build_shards(
 
 
 def generate_cross_source_pairs(
-    s1_df: pd.DataFrame, 
-    s2_df: pd.DataFrame, 
+    s1_data: Union[pd.DataFrame, List[Tuple[str, str]]], 
+    s2_data: Union[pd.DataFrame, List[Tuple[str, str]]], 
     max_pairs: int,
     stats: Dict[str, int],
     blocking_key: str = ""
 ) -> List[Tuple[str, str]]:
     """Generate candidate pairs from S1 to S2/S3 with oversized block handling."""
-    if s1_df.empty or s2_df.empty:
+    if s1_data is None or s2_data is None:
         return []
     
-    s1_records = s1_df[["entity_id", "name"]].to_dict("records")
-    s2_records = s2_df[["entity_id", "name"]].to_dict("records")
+    if isinstance(s1_data, pd.DataFrame):
+        if s1_data.empty:
+            return []
+        s1_records = [(r["entity_id"], r.get("name", "")) for r in s1_data.to_dict("records")]
+    else:
+        if not s1_data:
+            return []
+        s1_records = s1_data
+
+    if isinstance(s2_data, pd.DataFrame):
+        if s2_data.empty:
+            return []
+        s2_records = [(r["entity_id"], r.get("name", "")) for r in s2_data.to_dict("records")]
+    else:
+        if not s2_data:
+            return []
+        s2_records = s2_data
     
     total_possible = len(s1_records) * len(s2_records)
     pairs = []
     
     if total_possible <= max_pairs:
         for r1 in s1_records:
+            eid1 = r1[0]
             for r2 in s2_records:
-                pairs.append((r1["entity_id"], r2["entity_id"]))
+                pairs.append((eid1, r2[0]))
     else:
-        # Fix 3: Strict ceiling on max_pairs for oversized blocks
+        # Strict ceiling on max_pairs for oversized blocks
         stats["oversized_blocks"] += 1
         print(f"      [WARN] Oversized block:\n  key={blocking_key}\n  S1={len(s1_records)}\n  S2={len(s2_records)}\n  potential={total_possible}\n  limit={max_pairs}")
         
@@ -203,15 +219,17 @@ def generate_cross_source_pairs(
         remainder = max_pairs % len(s1_records)
         
         emitted = 0
+        n_s2 = len(s2_records)
         for i, r1 in enumerate(s1_records):
             add_count = k_per_s1 + (1 if i < remainder else 0)
+            eid1 = r1[0]
             
             for j in range(add_count):
                 if emitted >= max_pairs:
                     break
-                idx = (j * len(s2_records)) // add_count if add_count > 0 else 0
-                idx = min(idx, len(s2_records) - 1)
-                pairs.append((r1["entity_id"], s2_records[idx]["entity_id"]))
+                idx = (j * n_s2) // add_count if add_count > 0 else 0
+                idx = min(idx, n_s2 - 1)
+                pairs.append((eid1, s2_records[idx][0]))
                 emitted += 1
                 
     return pairs
@@ -227,7 +245,7 @@ def process_shard(shard_path: Path, output_dir: Path, max_pairs_per_block: int, 
     import duckdb
     con = duckdb.connect()
     
-    # Fix 1: Use duckdb to group out-of-core and stream the results to python
+    # Use duckdb to group out-of-core and stream the results to python
     query = f"""
     SELECT blocking_key,
            list(entity_id) as entity_ids,
@@ -251,30 +269,33 @@ def process_shard(shard_path: Path, output_dir: Path, max_pairs_per_block: int, 
         
         for row in chunk_df.itertuples(index=False):
             stats["blocks_processed"] += 1
-            
-            # Reconstruct the block DataFrame logically for subsetting
-            block_df = pd.DataFrame({
-                "entity_id": list(row.entity_ids),
-                "source": list(row.sources),
-                "name": list(row.names)
-            })
-            
-            # Fix 5: Prevent train/test cross-contamination by prefix splitting
-            block_df["prefix"] = block_df["source"].apply(lambda x: x.split('_')[0])
-            
-            for prefix, group in block_df.groupby("prefix"):
-                s1 = group[group["source"].str.contains("source1|source_1", regex=True)]
-                if s1.empty:
-                    continue
-                    
-                s2 = group[group["source"].str.contains("source2|source_2", regex=True)]
-                s3 = group[group["source"].str.contains("source3|source_3", regex=True)]
+            eids, srcs, names = row.entity_ids, row.sources, row.names
+            if len(eids) < 2:
+                continue
                 
-                if not s2.empty:
+            prefix_map: Dict[str, Dict[str, List[Tuple[str, str]]]] = {}
+            for eid, src, name in zip(eids, srcs, names):
+                pfx = src.split("_")[0]
+                if pfx not in prefix_map:
+                    prefix_map[pfx] = {"s1": [], "s2": [], "s3": []}
+                if "source1" in src or "source_1" in src:
+                    prefix_map[pfx]["s1"].append((eid, name))
+                elif "source2" in src or "source_2" in src:
+                    prefix_map[pfx]["s2"].append((eid, name))
+                elif "source3" in src or "source_3" in src:
+                    prefix_map[pfx]["s3"].append((eid, name))
+                    
+            for pfx, grp in prefix_map.items():
+                s1 = grp["s1"]
+                if not s1:
+                    continue
+                s2 = grp["s2"]
+                s3 = grp["s3"]
+                if s2:
                     p = generate_cross_source_pairs(s1, s2, max_pairs_per_block, stats, row.blocking_key)
                     stats["s1s2_pairs"] += len(p)
                     all_pairs.extend(p)
-                if not s3.empty:
+                if s3:
                     p = generate_cross_source_pairs(s1, s3, max_pairs_per_block, stats, row.blocking_key)
                     stats["s1s3_pairs"] += len(p)
                     all_pairs.extend(p)
