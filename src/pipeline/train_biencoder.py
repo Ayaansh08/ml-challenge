@@ -14,13 +14,14 @@ Architecture:
 
 import argparse
 import contextlib
+import importlib
 import logging
 import math
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -33,14 +34,11 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from sentence_transformers import InputExample, SentenceTransformer
 
-# Sentence Transformers losses compatibility import across v2 and v3
+# Sentence Transformers losses compatibility import across v2 and v3.
 try:
-    import sentence_transformers.sentence_transformer.losses as st_losses
+    st_losses = importlib.import_module("sentence_transformers.sentence_transformer.losses")
 except ImportError:
-    try:
-        import sentence_transformers.losses as st_losses
-    except ImportError:
-        from sentence_transformers import losses as st_losses
+    st_losses = importlib.import_module("sentence_transformers.losses")
 
 from src.pipeline.pair_construction import mine_hard_negatives
 from src.utils.config import OUTPUTS_DIR
@@ -72,8 +70,8 @@ def make_collate_fn(model: SentenceTransformer) -> Callable:
     def collate_fn(batch: List[InputExample]) -> Tuple[List[Dict[str, torch.Tensor]], torch.Tensor]:
         if not batch:
             return [], torch.empty(0, dtype=torch.long)
-        num_slots = len(batch[0].texts)
-        slot_texts = [[ex.texts[i] for ex in batch] for i in range(num_slots)]
+        num_slots = len(batch[0].texts or [])
+        slot_texts = [[(ex.texts or [])[i] for ex in batch] for i in range(num_slots)]
 
         features: List[Dict[str, Any]] = []
         for texts in slot_texts:
@@ -84,8 +82,11 @@ def make_collate_fn(model: SentenceTransformer) -> Callable:
             elif hasattr(model, "tokenizer"):
                 tokenized = model.tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
             else:
-                tokenized = model[0].tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
-            features.append(tokenized)
+                tokenizer = getattr(model[0], "tokenizer", None)
+                if not callable(tokenizer):
+                    raise TypeError("The model tokenizer is not callable")
+                tokenized = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+            features.append(cast(Dict[str, Any], tokenized))
 
         labels = torch.zeros(len(batch), dtype=torch.long)
         return features, labels
@@ -169,8 +170,11 @@ def compute_recall_at_k(
 
     # 1. Build unique anchors and mapping of ground-truth matches per anchor
     anchor_df = val_df[["s1_entity_id", "s1_text"]].drop_duplicates(subset=["s1_entity_id"]).reset_index(drop=True)
-    gt_map: Dict[str, Set[str]] = (
-        val_df.groupby("s1_entity_id")["match_entity_id"].apply(lambda s: set(s.dropna().unique())).to_dict()
+    gt_map: Dict[str, Set[str]] = cast(
+        Dict[str, Set[str]],
+        val_df.groupby("s1_entity_id")["match_entity_id"]
+        .apply(lambda s: set(s.dropna().unique()))
+        .to_dict(),
     )
 
     # 2. Build candidate pool
@@ -314,14 +318,22 @@ def train_biencoder(
     else:
         cand_pool = candidate_pool_df.drop_duplicates(subset=["match_entity_id"]).reset_index(drop=True)
 
-    train_gt_map: Dict[str, Set[str]] = (
-        tr_df.groupby("s1_entity_id")["match_entity_id"].apply(lambda s: set(s.dropna().unique())).to_dict()
-    )
+    train_gt_map: Dict[str, Set[str]] = {
+        str(entity_id): {str(match_id) for match_id in match_ids}
+        for entity_id, match_ids in tr_df.groupby("s1_entity_id")["match_entity_id"]
+        .apply(lambda s: set(s.dropna().unique()))
+        .items()
+    }
 
     # Prepare PyTorch Dataloader with custom collate function
     train_examples, _ = load_pair_dataset(tr_df, vl_df)
     collate_fn = make_collate_fn(model)
-    train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=batch_size, collate_fn=collate_fn)
+    train_dataloader = DataLoader(
+        EntityPairDataset(train_examples),
+        shuffle=True,
+        batch_size=batch_size,
+        collate_fn=collate_fn,
+    )
 
     # Loss function: MultipleNegativesRankingLoss supports in-batch negatives + triplets
     train_loss = st_losses.MultipleNegativesRankingLoss(model=model)

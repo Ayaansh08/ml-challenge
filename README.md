@@ -4,6 +4,8 @@ A modular machine learning pipeline for business entity resolution across dispar
 
 ## Repo Structure
 
+> **For AI Agents:** Before contributing, please read the internal living documentation located in `docs/` (start with `docs/PROJECT_CONTEXT.md` and `docs/IMPLEMENTATION_STATUS.md`).
+
 ```text
 ├── data/
 │   ├── train/                 # Training raw datasets
