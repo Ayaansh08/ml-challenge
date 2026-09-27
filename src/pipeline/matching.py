@@ -88,9 +88,17 @@ def prepare_training_data(
     s1_col = "source1_entity_id" if "source1_entity_id" in gt_df.columns else gt_df.columns[0]
     matches_col = "matched_entity_ids" if "matched_entity_ids" in gt_df.columns else gt_df.columns[1]
 
-    for _, row in gt_df.iterrows():
-        s1_id = str(row[s1_col]).strip()
-        raw_matches = str(row[matches_col]).strip()
+    # Optimization: Filter GT to relevant entity IDs in candidate pairs
+    if "entity_id_1" in features_df.columns:
+        relevant_ids = set(features_df["entity_id_1"])
+        if "entity_id_2" in features_df.columns:
+            relevant_ids.update(features_df["entity_id_2"])
+        gt_df = gt_df[gt_df[s1_col].isin(relevant_ids)]
+
+    for row in gt_df.itertuples(index=False):
+        row_dict = dict(zip(gt_df.columns, row))
+        s1_id = str(row_dict[s1_col]).strip()
+        raw_matches = str(row_dict[matches_col]).strip()
         if not raw_matches or raw_matches.lower() in ("nan", "none", "null", ""):
             continue
         match_ids = [m.strip() for m in raw_matches.split(",") if m.strip()]

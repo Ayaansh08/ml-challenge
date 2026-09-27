@@ -241,65 +241,53 @@ def process_shard(shard_path: Path, output_dir: Path, max_pairs_per_block: int, 
     files = list(shard_path.glob("*.parquet"))
     if not files:
         return 0
-        
-    import duckdb
-    con = duckdb.connect()
     
-    # Use duckdb to group out-of-core and stream the results to python
-    query = f"""
-    SELECT blocking_key,
-           list(entity_id) as entity_ids,
-           list(source) as sources,
-           list(name) as names
-    FROM read_parquet('{shard_path}/*.parquet')
-    GROUP BY blocking_key
-    """
+    # Read all shard files with pandas and group by blocking_key
+    # Avoids DuckDB/PyArrow interoperability issues (TProtocolException: Invalid data)
+    dfs = [pd.read_parquet(f) for f in files]
+    if not dfs:
+        return 0
+    shard_df = pd.concat(dfs, ignore_index=True)
     
     all_pairs = []
     total_shard_pairs = 0
     chunk_idx = 0
     
-    cursor = con.execute(query)
-    while True:
-        chunk = cursor.fetch_arrow_table(10000)
-        if chunk is None or chunk.num_rows == 0:
-            break
+    for blocking_key, group in shard_df.groupby("blocking_key", sort=False):
+        stats["blocks_processed"] += 1
+        eids = group["entity_id"].tolist()
+        srcs = group["source"].tolist()
+        names = group["name"].tolist()
+        if len(eids) < 2:
+            continue
             
-        chunk_df = chunk.to_pandas()
-        
-        for row in chunk_df.itertuples(index=False):
-            stats["blocks_processed"] += 1
-            eids, srcs, names = row.entity_ids, row.sources, row.names
-            if len(eids) < 2:
-                continue
+        prefix_map: Dict[str, Dict[str, List[Tuple[str, str]]]] = {}
+        for eid, src, name in zip(eids, srcs, names):
+            pfx = src.split("_")[0]
+            if pfx not in prefix_map:
+                prefix_map[pfx] = {"s1": [], "s2": [], "s3": []}
+            if "source1" in src or "source_1" in src:
+                prefix_map[pfx]["s1"].append((eid, name))
+            elif "source2" in src or "source_2" in src:
+                prefix_map[pfx]["s2"].append((eid, name))
+            elif "source3" in src or "source_3" in src:
+                prefix_map[pfx]["s3"].append((eid, name))
                 
-            prefix_map: Dict[str, Dict[str, List[Tuple[str, str]]]] = {}
-            for eid, src, name in zip(eids, srcs, names):
-                pfx = src.split("_")[0]
-                if pfx not in prefix_map:
-                    prefix_map[pfx] = {"s1": [], "s2": [], "s3": []}
-                if "source1" in src or "source_1" in src:
-                    prefix_map[pfx]["s1"].append((eid, name))
-                elif "source2" in src or "source_2" in src:
-                    prefix_map[pfx]["s2"].append((eid, name))
-                elif "source3" in src or "source_3" in src:
-                    prefix_map[pfx]["s3"].append((eid, name))
-                    
-            for pfx, grp in prefix_map.items():
-                s1 = grp["s1"]
-                if not s1:
-                    continue
-                s2 = grp["s2"]
-                s3 = grp["s3"]
-                if s2:
-                    p = generate_cross_source_pairs(s1, s2, max_pairs_per_block, stats, row.blocking_key)
-                    stats["s1s2_pairs"] += len(p)
-                    all_pairs.extend(p)
-                if s3:
-                    p = generate_cross_source_pairs(s1, s3, max_pairs_per_block, stats, row.blocking_key)
-                    stats["s1s3_pairs"] += len(p)
-                    all_pairs.extend(p)
-                    
+        for pfx, grp in prefix_map.items():
+            s1 = grp["s1"]
+            if not s1:
+                continue
+            s2 = grp["s2"]
+            s3 = grp["s3"]
+            if s2:
+                p = generate_cross_source_pairs(s1, s2, max_pairs_per_block, stats, blocking_key)
+                stats["s1s2_pairs"] += len(p)
+                all_pairs.extend(p)
+            if s3:
+                p = generate_cross_source_pairs(s1, s3, max_pairs_per_block, stats, blocking_key)
+                stats["s1s3_pairs"] += len(p)
+                all_pairs.extend(p)
+                
         # Flush if memory is growing
         if len(all_pairs) >= 500_000:
             pdf = pd.DataFrame(all_pairs, columns=["entity_id_1", "entity_id_2"])
@@ -315,7 +303,6 @@ def process_shard(shard_path: Path, output_dir: Path, max_pairs_per_block: int, 
         pdf.to_parquet(out_chunk, index=False)
         total_shard_pairs += len(pdf)
         
-    con.close()
     return total_shard_pairs
 
 
